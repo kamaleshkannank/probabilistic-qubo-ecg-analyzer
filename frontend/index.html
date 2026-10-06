@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QUBO ECG Analyzer — Probabilistic Randomized Portal</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--ink:#0e2a47;--muted:#5b7290;--accent:#0e7c8a;--accent2:#0e3a5d;--warn:#b45309;--danger:#b91c1c;--ok:#15803d;--line:#e2e8f0}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+.topbar{background:linear-gradient(90deg,#0e3a5d,#0e7c8a);color:#fff;padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.topbar h1{font-size:18px;margin:0}.topbar small{opacity:.9}
+.banner{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;padding:10px 16px;margin:12px 16px;border-radius:10px;font-size:13px}
+.layout{max-width:1200px;margin:0 auto;padding:0 16px 40px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(14,58,93,.06)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+input,select{padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;min-width:120px;background:#fff}
+button{background:var(--accent2);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:14px;cursor:pointer}
+button.sec{background:#fff;color:var(--accent2);border:1px solid var(--accent2)}
+button:hover{opacity:.92}
+canvas{width:100%;height:260px;background:#0b1b2b;border-radius:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px}
+.kpi b{font-size:18px}.kpi span{font-size:12px;color:var(--muted)}
+.bar{height:9px;background:#eef2f7;border-radius:6px;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:linear-gradient(90deg,#0e7c8a,#22c55e)}
+.badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;background:#eef2ff;border:1px solid #c7d2fe;margin-left:6px}
+.badge.q{background:#dcfce7;border-color:#86efac}.badge.sim{background:#fef3c7;border-color:#fcd34d}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+th{background:#f1f5f9}ul{margin:6px 0;padding-left:18px;font-size:13px}
+.footer{font-size:12px;color:var(--muted)}
+.legend{font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+</style>
+</head>
+<body>
+<div class="topbar">
+<div><h1>Probabilistic Randomized QUBO-Based ECG Analyzer</h1><small>Fast • Explainable • Uncertainty-Aware Doctor Assistance — MIT-BIH (PhysioNet) • React + FastAPI + SciPy + WFDB + Classical QUBO</small></div>
+<div><span class="badge sim">TRAINED MODEL • RESEARCH PROTOTYPE</span></div>
+</div>
+<div class="banner">⚕️ <b>Physician assistance only — not an autonomous diagnosis.</b> NSR/Rhythm/Ectopic probabilities come from a calibrated model trained on 1770 expert-annotated MIT-BIH windows; BRADY/TACHY/QT/ST are deterministic clinical thresholds on real measurements. Stability = bootstrap robustness, not clinical certainty. Signal processing: Butterworth HP 0.5 Hz + 50 Hz notch (Q=30) + LP 45 Hz, zero-phase <i>filtfilt</i> to preserve morphology.</div>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef} = React;
+
+function WaveCanvas({wave, rpeaks, showRaw}){
+  const ref = useRef(null);
+  useEffect(()=>{
+    const c = ref.current; if(!c||!wave) return;
+    const ctx = c.getContext('2d');
+    const W = c.width = c.offsetWidth*2, H = c.height = 520;
+    ctx.fillStyle='#0b1b2b'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1;
+    for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    const draw=(arr,color)=>{
+      if(!arr||!arr.length) return;
+      let mn=Math.min(...arr.slice(0,3000)), mx=Math.max(...arr.slice(0,3000));
+      if(mx-mn<1e-6){mx+=1;mn-=1;}
+      ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.beginPath();
+      arr.forEach((v,i)=>{const x=i/(arr.length-1)*W; const y=H-((v-mn)/(mx-mn))*(H-60)-30; i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+      ctx.stroke();
+    };
+    if(showRaw) draw(wave.raw,'rgba(148,163,184,.85)');
+    draw(wave.filtered,'#22d3ee');
+    // R peaks (downsampled coords approx)
+    ctx.fillStyle='#f87171';
+    (rpeaks||[]).slice(0,60).forEach(r=>{
+      const idx = Math.round(r/(wave.step||1));
+      if(idx<wave.filtered.length){const x=idx/(wave.filtered.length-1)*W; ctx.fillRect(x-2,10,4,26);}
+    });
+  },[wave,rpeaks,showRaw]);
+  return <canvas ref={ref}></canvas>;
+}
+
+function App(){
+  const [records,setRecords]=useState([]);
+  const [record,setRecord]=useState('100');
+  const [seconds,setSeconds]=useState(10);
+  const [nStates,setNStates]=useState(100);
+  const [seed,setSeed]=useState(42);
+  const [showRaw,setShowRaw]=useState(true);
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState('');
+
+  useEffect(()=>{fetch('/api/records').then(r=>r.json()).then(j=>{setRecords(j.records||[]);}).catch(()=>setRecords(['100','101','102','200','208','213']));},[]);
+  const analyze=async()=>{
+    setLoading(true); setErr('');
+    try{
+      const u=`/api/analyze_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
+      const r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
+      setData(await r.json());
+    }catch(e){setErr(String(e));}
+    setLoading(false);
+  };
+  useEffect(()=>{analyze();},[]);
+  const pdfUrl = `/api/report_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
+
+  const onUpload=async(ev)=>{
+    const f=ev.target.files[0]; if(!f) return;
+    const fd=new FormData(); fd.append('file',f);
+    setLoading(true);
+    try{const r=await fetch('/api/upload_csv?fs=360', {method:'POST',body:fd}); setData(await r.json());}
+    catch(e){setErr(String(e));}
+    setLoading(false);
+  };
+
+  const feat=data?.features, meta=data?.meta;
+  return <div className="layout">
+    <div className="card">
+      <div className="controls">
+        <div><label>MIT-BIH Record</label><select value={record} onChange={e=>setRecord(e.target.value)}>{(records.length?records:['100','101','102','200']).map(r=><option key={r} value={r}>{r}</option>)}</select></div>
+        <div><label>Seconds (4–60)</label><input type="number" value={seconds} min="4" max="60" onChange={e=>setSeconds(e.target.value)}/></div>
+        <div><label>Stochastic states N</label><input type="number" value={nStates} min="20" max="500" onChange={e=>setNStates(e.target.value)}/></div>
+        <div><label>Seed (reproducible)</label><input type="number" value={seed} onChange={e=>setSeed(e.target.value)}/></div>
+        <button onClick={analyze} disabled={loading}>{loading?'Analyzing…':'Analyze ECG'}</button>
+        <a href={pdfUrl}><button className="sec" type="button">Download PDF Report</button></a>
+        <div><label>Upload CSV (single column)</label><input type="file" accept=".csv,.txt" onChange={onUpload}/></div>
+        <label><input type="checkbox" checked={showRaw} onChange={e=>setShowRaw(e.target.checked)}/> show raw</label>
+      </div>
+      {err && <p style={{color:'#b91c1c'}}>{err}</p>}
+      {meta && <p className="footer">Source: {meta.source} • Record {meta.record} • fs {meta.fs} Hz • SQI: {meta.sqi?.quality} (SNR {meta.sqi?.snr_db} dB) {meta.from_cache?'• from local cache (real data, no download)':''}</p>}
+    </div>
+
+    <div className="card">
+      <h3 style={{margin:'0 0 8px'}}>Waveform — raw vs filtered (0.5–45 Hz + 50 Hz notch) <span className="badge sim">REAL MIT-BIH DATA</span></h3>
+      {data?.waveform ? <WaveCanvas wave={data.waveform} rpeaks={data.r_peaks} showRaw={showRaw}/> : <p>Loading…</p>}
+      <div className="legend"><span><i className="dot" style={{background:'#94a3b8'}}></i>Raw</span><span><i className="dot" style={{background:'#22d3ee'}}></i>Filtered (morphology-preserving filtfilt)</span><span><i className="dot" style={{background:'#f87171'}}></i>R-peak</span></div>
+    </div>
+
+    <div className="grid2">
+      <div className="card"><h3>Measurements <span className="badge">estimates</span></h3>
+        {feat ? <div className="kpis">
+          {[['Heart rate',feat.heart_rate_bpm+' bpm'],['RR mean',feat.rr_mean_s+' s'],['RR std',feat.rr_std_s+' s'],['RMSSD',feat.rmssd_s+' s'],['Regularity CV',feat.regularity_cv],['QRS',feat.qrs_ms+' ms'],['QT',feat.qt_ms+' ms'],['QTc (Bazett)',feat.qtc_ms+' ms'],['ST',feat.st_mv+' mV'],['Beats',feat.n_beats]].map(([k,v])=><div className="kpi" key={k}><span>{k}</span><br/><b>{v}</b></div>)}
+        </div>:<p>No data</p>}
+      </div>
+      <div className="card"><h3>QUBO Optimization <span className="badge">classical solver</span></h3>
+        {data?.qubo ? <div><p style={{fontSize:13}}>E(x) = Σ aᵢxᵢ + Σ bᵢⱼxᵢxⱼ • Energy <b>{data.qubo.energy}</b> • {data.qubo.method}</p>
+        <table><thead><tr><th>Finding</th><th>x (selected)</th></tr></thead><tbody>{data.qubo.codes.map((c,i)=><tr key={c}><td>{c}</td><td>{data.qubo.solution[i]?'1 ✓':'0'}</td></tr>)}</tbody></table></div>:<p>No data</p>}
+      </div>
+    </div>
+
+    <div className="card"><h3>Candidate Findings — P(F|E) trained + Stability S=N<sub>F</sub>/N + QUBO</h3>
+      {data?.meta?.model?.metrics && <p className="footer">Model 5-fold AUROC: {Object.entries(data.meta.model.metrics).map(([k,m])=>`${k} ${m.auroc_5fold}`).join(' • ')} (1770 MIT-BIH windows)</p>}
+      <table><thead><tr><th>Finding</th><th>P (trained)</th><th>Stability</th><th>QUBO</th></tr></thead><tbody>
+      {(data?.probabilities||[]).map(p=><tr key={p.code}><td><b>{p.name}</b> <span className="badge sim">{p.method}</span> {p.qubo_selected?<span className="badge q">QUBO SELECTED</span>:null}<br/><span className="footer">{p.code} — {p.explanation}</span><div className="bar"><div style={{width:(p.probability*100)+'%'}}></div></div></td><td>{p.probability}</td><td>{p.stability} ({p.support}/{nStates})</td><td>{p.qubo_selected}</td></tr>)}
+      </tbody></table>
+      <p className="footer">Stability (bootstrap over this record's own beats) ≠ diagnostic probability — it measures robustness under the patient's own beat-to-beat variability.</p>
+    </div>
+
+    <div className="card"><h3>Possible Next Diagnostic Steps (informational — not medical advice)</h3>
+      {(data?.probabilities||[]).filter(p=>p.qubo_selected||p.probability>=0.5).map(p=><div key={p.code}><b>{p.name}</b><ul>{p.next_steps.map((s,i)=><li key={i}>{s}</li>)}</ul></div>)}
+      <p className="footer">Always require physician review. Correlate with symptoms, history, 12-lead ECG, labs and imaging.</p>
+    </div>
+
+    <div className="card"><h3>Method & Reproducibility</h3>
+      <ul><li>Filters: Butterworth HP 0.5 Hz (ord 4) → notch 50 Hz Q30 → LP 45 Hz (ord 4), all <i>filtfilt</i> zero-phase.</li><li>Features: energy-based R detection, RR/HR/HRV, QRS/QT/QTc/ST estimates + per-beat distributions.</li><li>Probability: calibrated RandomForest trained on 1770 expert-annotated MIT-BIH windows (NSR/Rhythm/Ectopic) + deterministic clinical thresholds (BRADY/TACHY/QT/ST).</li><li>Uncertainty: nonparametric bootstrap over the record's own beats, N={nStates}, seed={seed} — reproducible, no assumed noise model.</li><li>QUBO: linear aᵢ=−(p−0.5)·w; conflicts NSR↔abnormal, brady↔tachy; exhaustive (n≤20) else simulated annealing.</li><li>Dataset: MIT-BIH Arrhythmia Database, local disk cache (prefetch with <i>py -m backend.prefetch</i>); error — never synthetic — if unavailable.</li></ul>
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

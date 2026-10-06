@@ -1,0 +1,81 @@
+{
+  "model": "RandomForest(300, balanced_subsample) + sigmoid calibration (Platt), 5-fold CV",
+  "features": [
+    "heart_rate_bpm",
+    "rr_mean_s",
+    "rr_std_s",
+    "rmssd_s",
+    "regularity_cv",
+    "qrs_ms",
+    "qt_ms",
+    "qtc_ms",
+    "st_mv",
+    "p_present_frac",
+    "n_beats"
+  ],
+  "targets": [
+    "NSR",
+    "RHYTHM_ABN",
+    "ECTOPIC"
+  ],
+  "windows": 1770,
+  "records": [
+    "100",
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107",
+    "200",
+    "201",
+    "202",
+    "203",
+    "205",
+    "208",
+    "209",
+    "210",
+    "212",
+    "213",
+    "214",
+    "215",
+    "217",
+    "219",
+    "222",
+    "223",
+    "228",
+    "230",
+    "231",
+    "232",
+    "233",
+    "234"
+  ],
+  "metrics": {
+    "NSR": {
+      "n": 1770,
+      "positives": 657,
+      "auroc_5fold": 0.9876,
+      "brier_5fold": 0.03767
+    },
+    "RHYTHM_ABN": {
+      "n": 1770,
+      "positives": 360,
+      "auroc_5fold": 0.9717,
+      "brier_5fold": 0.05731
+    },
+    "ECTOPIC": {
+      "n": 1770,
+      "positives": 814,
+      "auroc_5fold": 0.9713,
+      "brier_5fold": 0.06526
+    }
+  },
+  "deterministic_criteria": {
+    "BRADY": "measured HR < 60 bpm (AHA definition)",
+    "TACHY": "measured HR > 100 bpm (AHA definition)",
+    "QT_PROLONG": "measured QTc (Bazett) >= 470 ms",
+    "ST_ABN": "measured |ST deviation| >= 0.1 mV"
+  },
+  "note": "All labels from MIT-BIH expert annotations; probabilities are calibrated classifier outputs, not heuristics."
+}
