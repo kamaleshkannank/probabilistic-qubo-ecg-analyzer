@@ -55,3 +55,4 @@ Butterworth HP 0.5Hz + 50Hz notch Q30 + LP 45Hz (filtfilt) → features → P(F|
 ## Docs
 - `docs/TECHNICAL_DOCUMENTATION.md` — patent-research doc
 - `docs/FILTER_VALIDATION.md` — filter settings validation
+"# probabilistic-qubo-ecg-analyzer" 
