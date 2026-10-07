@@ -1,6 +1,7 @@
 """MIT-BIH Arrhythmia Database loader: local disk cache first, PhysioNet download second.
 NO synthetic fallback: if data is unavailable an explicit error is raised."""
 import os
+from functools import lru_cache
 import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +30,14 @@ def _cache_path(record: str) -> str:
 
 def is_cached(record: str) -> bool:
     return os.path.exists(_cache_path(str(record)))
+
+
+@lru_cache(maxsize=8)
+def _read_cached(path: str):
+    """In-memory cache of full records: repeat analyzes skip disk (~50ms).
+    Returned array is never mutated (callers slice+copy via astype)."""
+    z = np.load(path)
+    return z["signal"], float(z["fs"])
 
 
 def download_record(record: str) -> dict:
@@ -66,8 +75,7 @@ def load_mitbih(record: str = "100", seconds: float = 10.0, channel: int = 0):
     if channel != 0:
         raise ValueError("Only channel 0 is cached in this build.")
     if is_cached(record):
-        z = np.load(_cache_path(record))
-        sig, fs = z["signal"], float(z["fs"])
+        sig, fs = _read_cached(_cache_path(record))
         source = "MIT-BIH Arrhythmia Database — local disk cache (real data)"
     else:
         try:

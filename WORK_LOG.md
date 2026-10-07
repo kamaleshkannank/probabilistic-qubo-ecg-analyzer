@@ -45,6 +45,37 @@
 
 ## 7. Final verification (all passed)
 ## 8. Hosting-ready + reload verification
+## 10. Performance optimization pass (measured, all tests pass)
+## 13. Professional 5-page clinical report (validated)
+- New backend/clinical.py: dynamic conclusion (NSR never abnormal), controlled condition/next-step mappings, insight blocks. Fixed summarize_findings NSR mislabel.
+- Rewrote backend/report.py: P1 summary+conclusion, P2 full-page B&W waveform (numbered R-peaks only), P3 measurements table, P4 analytical results + workflow + model performance, P5 automated insight + optional Gemini + review blanks + exact disclaimer + technical notes. Header/footer + Page X of Y on every page.
+- main.py: clinical B&W waveform + units threading in report routes. No algorithm file touched (predictions/probabilities/bootstrap/QUBO identical).
+- Validation 34/34 + regression 45/45 pass. Output: ECG_Analyzer_Professional_Report.pdf (5 pages, record 101).
+## 12. Key-free AI alternatives (43/43 checks pass)
+- `AI_PROVIDER` env: gemini (default) | ollama (local LLM, no key/quota) | template (deterministic writer, always works, labeled "no LLM").
+- Template restates QUBO findings + explanations + urgent flags; never invents associations. Ollama calls localhost:11434 with JSON mode + timeout, graceful hint if not running.
+- Suite now 43 checks (template/ollama-down/fallback tests). Docs updated (.env.example, README).
+## 11. Gemini 404 root cause + fix (verified against live API)
+- Root cause: retired model IDs. Google API verbatim: gemini-2.0-flash "no longer available", gemini-2.5-flash/pro "no longer available to new users" -> use gemini-3.8-flash.
+- Default model now gemini-3.8-flash; automatic fallback gemini-3.7-flash,gemini-3.6-flash on server/quota/timeout (answering model recorded in output).
+- Errors classified separately (missing_key/auth/not_found/quota/server/timeout/network/request/bad_response), sanitized, key never exposed.
+- New backend/gemini_doctor.py (key length only, model list, live test). Test suite 39/39 pass incl. 503-fallback simulation.
+- Baseline (rec 208/10 s/N=100): TOTAL 70.7 s - bootstrap scoring 68.7 s, single inference 3.2 s, qubo 2.1 ms, plot 560 ms, pdf 309 ms.
+- `probability.py`: batched inference (3 model calls per N states, was 3N) - identical outputs; fixed unclosed file handle.
+- `stochastic.py`: same RNG sampling loop + batched scoring (bootstrap 68.7 s -> 0.6 s, ~110x).
+- `qubo.py`: removed dead buggy `energy()`; vectorized exhaustive search, same order/tie-break (tested vs brute force incl. ties).
+- `mitbih_loader.py`: in-memory LRU record cache (repeat loads 11 ms -> 0.3 ms).
+- `report.py`: waveform dpi 150->110 + PNG optimize (plot 560->374 ms, pdf 309->146 ms); temp dirs cleaned up.
+- `main.py`: per-stage `timings` in every response + server log; startup model warmup (lifespan); plot/pdf/gemini timed on report routes.
+- `gemini_client.py`: official `google-genai` SDK, single call/report, `GEMINI_TIMEOUT_MS` (30 s default), graceful fallback; PDF heading now "AI-Assisted Interpretation - Requires Clinician Review".
+- New `backend/timing.py`, `backend/test_optimize.py` (31 checks pass). Deps added: `google-genai`.
+- After: steady-state TOTAL ~1.2 s (57x). Remaining bottleneck: RF predict itself (~1.2 s, needs retrain to reduce - not done, outputs preserved).
+## 9. Gemini AI interpretation + doctor-style PDF (all passed)
+- New `backend/gemini_client.py`: key from `GEMINI_API_KEY` env only; grounded prompt (measured data only + 6 guardrails); deterministic urgent flags + normal/abnormal/uncertain split; never raises.
+- `report.py`: official header (provided data or "Not provided", never invented), urgent banner, training summary, explained measurements, findings, deterministic overall summary, Gemini section (or "unavailable" notice), blank doctor-review fields, exact disclaimer, timestamps + page numbers, UNREVIEWED footer.
+- `main.py`: patient fields + `ai` flag on report endpoints, Gemini called AFTER QUBO, new `GET /api/ai_insights` (key stays server-side).
+- Frontend: facility/patient inputs, AI toggle, "Preview AI insights" card. `.env.example`, `.gitignore` covers `.env`, README documents setup.
+- Tests: prompt grounding, no-key/invalid-key graceful paths, PDF content (4 pages, no key material), routes - ALL PASSED.
 - `Dockerfile` now honors `$PORT` (Render/Railway compatible); added `render.yaml` (one-click Render deploy) and `.dockerignore` (slim image; MIT-BIH cache downloads on demand at runtime).
 - Gave user two routes: free Render internet hosting (GitHub + Render steps) vs local-network access (`--host 0.0.0.0`).
 - Reload check passed: health ok (model True, 24 cached), analyze 200, PDF 200.

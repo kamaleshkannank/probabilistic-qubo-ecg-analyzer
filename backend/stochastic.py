@@ -6,7 +6,7 @@ patient's own beat-to-beat variability.
 """
 import numpy as np
 
-from .probability import estimate_probabilities
+from .probability import estimate_probabilities_batch
 
 
 def _summarize_rr(rr: np.ndarray) -> dict:
@@ -49,10 +49,12 @@ def sample_states(base_feat: dict, n_states: int = 100, seed: int = 42):
 
 
 def stability_analysis(base_feat: dict, base_probs: list, n_states=100, seed=42, threshold=0.5):
-    states = sample_states(base_feat, n_states, seed)
+    states = sample_states(base_feat, n_states, seed)  # unchanged RNG stream
+    # Batched inference: 3 model calls for all N states (was 3N). Same numbers.
+    scored = estimate_probabilities_batch(states)
     counts = {p["code"]: 0 for p in base_probs}
-    for s in states:
-        for p in estimate_probabilities(s):
+    for plist in scored:
+        for p in plist:
             if p["probability"] >= threshold:
                 counts[p["code"]] += 1
     stability = [{"code": c, "support": counts[c], "total": n_states,

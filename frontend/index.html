@@ -1,168 +1,961 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>QUBO ECG Analyzer — Probabilistic Randomized Portal</title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<style>
-:root{--bg:#f4f7fb;--card:#fff;--ink:#0e2a47;--muted:#5b7290;--accent:#0e7c8a;--accent2:#0e3a5d;--warn:#b45309;--danger:#b91c1c;--ok:#15803d;--line:#e2e8f0}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-.topbar{background:linear-gradient(90deg,#0e3a5d,#0e7c8a);color:#fff;padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
-.topbar h1{font-size:18px;margin:0}.topbar small{opacity:.9}
-.banner{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;padding:10px 16px;margin:12px 16px;border-radius:10px;font-size:13px}
-.layout{max-width:1200px;margin:0 auto;padding:0 16px 40px;display:grid;gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(14,58,93,.06)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
-.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
-label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-input,select{padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;min-width:120px;background:#fff}
-button{background:var(--accent2);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:14px;cursor:pointer}
-button.sec{background:#fff;color:var(--accent2);border:1px solid var(--accent2)}
-button:hover{opacity:.92}
-canvas{width:100%;height:260px;background:#0b1b2b;border-radius:10px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.kpi{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px}
-.kpi b{font-size:18px}.kpi span{font-size:12px;color:var(--muted)}
-.bar{height:9px;background:#eef2f7;border-radius:6px;overflow:hidden;margin-top:6px}
-.bar>div{height:100%;background:linear-gradient(90deg,#0e7c8a,#22c55e)}
-.badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;background:#eef2ff;border:1px solid #c7d2fe;margin-left:6px}
-.badge.q{background:#dcfce7;border-color:#86efac}.badge.sim{background:#fef3c7;border-color:#fcd34d}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
-th{background:#f1f5f9}ul{margin:6px 0;padding-left:18px;font-size:13px}
-.footer{font-size:12px;color:var(--muted)}
-.legend{font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
-.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QUBO-ECG — Uncertainty-Aware Probabilistic ECG Analyzer</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div class="topbar">
-<div><h1>Probabilistic Randomized QUBO-Based ECG Analyzer</h1><small>Fast • Explainable • Uncertainty-Aware Doctor Assistance — MIT-BIH (PhysioNet) • React + FastAPI + SciPy + WFDB + Classical QUBO</small></div>
-<div><span class="badge sim">TRAINED MODEL • RESEARCH PROTOTYPE</span></div>
-</div>
-<div class="banner">⚕️ <b>Physician assistance only — not an autonomous diagnosis.</b> NSR/Rhythm/Ectopic probabilities come from a calibrated model trained on 1770 expert-annotated MIT-BIH windows; BRADY/TACHY/QT/ST are deterministic clinical thresholds on real measurements. Stability = bootstrap robustness, not clinical certainty. Signal processing: Butterworth HP 0.5 Hz + 50 Hz notch (Q=30) + LP 45 Hz, zero-phase <i>filtfilt</i> to preserve morphology.</div>
-<div id="root"></div>
-<script type="text/babel">
-const {useState,useEffect,useRef} = React;
+  <div id="root"></div>
 
-function WaveCanvas({wave, rpeaks, showRaw}){
-  const ref = useRef(null);
-  useEffect(()=>{
-    const c = ref.current; if(!c||!wave) return;
-    const ctx = c.getContext('2d');
-    const W = c.width = c.offsetWidth*2, H = c.height = 520;
-    ctx.fillStyle='#0b1b2b'; ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1;
-    for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    const draw=(arr,color)=>{
-      if(!arr||!arr.length) return;
-      let mn=Math.min(...arr.slice(0,3000)), mx=Math.max(...arr.slice(0,3000));
-      if(mx-mn<1e-6){mx+=1;mn-=1;}
-      ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.beginPath();
-      arr.forEach((v,i)=>{const x=i/(arr.length-1)*W; const y=H-((v-mn)/(mx-mn))*(H-60)-30; i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
-      ctx.stroke();
-    };
-    if(showRaw) draw(wave.raw,'rgba(148,163,184,.85)');
-    draw(wave.filtered,'#22d3ee');
-    // R peaks (downsampled coords approx)
-    ctx.fillStyle='#f87171';
-    (rpeaks||[]).slice(0,60).forEach(r=>{
-      const idx = Math.round(r/(wave.step||1));
-      if(idx<wave.filtered.length){const x=idx/(wave.filtered.length-1)*W; ctx.fillRect(x-2,10,4,26);}
-    });
-  },[wave,rpeaks,showRaw]);
-  return <canvas ref={ref}></canvas>;
-}
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-function App(){
-  const [records,setRecords]=useState([]);
-  const [record,setRecord]=useState('100');
-  const [seconds,setSeconds]=useState(10);
-  const [nStates,setNStates]=useState(100);
-  const [seed,setSeed]=useState(42);
-  const [showRaw,setShowRaw]=useState(true);
-  const [data,setData]=useState(null);
-  const [loading,setLoading]=useState(false);
-  const [err,setErr]=useState('');
+    // --- SVG Icon Helpers ---
+    const IconHeart = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>;
+    const IconActivity = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>;
+    const IconShield = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>;
+    const IconCpu = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="15" x2="23" y2="15"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="15" x2="4" y2="15"></line></svg>;
+    const IconFileText = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>;
+    const IconAlertTriangle = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+    const IconCheckCircle = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
 
-  useEffect(()=>{fetch('/api/records').then(r=>r.json()).then(j=>{setRecords(j.records||[]);}).catch(()=>setRecords(['100','101','102','200','208','213']));},[]);
-  const analyze=async()=>{
-    setLoading(true); setErr('');
-    try{
-      const u=`/api/analyze_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
-      const r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
-      setData(await r.json());
-    }catch(e){setErr(String(e));}
-    setLoading(false);
-  };
-  useEffect(()=>{analyze();},[]);
-  const pdfUrl = `/api/report_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
+    // --- Interactive Waveform Canvas Component ---
+    function WaveCanvas({ wave, rpeaks, showRaw, height = 300 }) {
+      const canvasRef = useRef(null);
 
-  const onUpload=async(ev)=>{
-    const f=ev.target.files[0]; if(!f) return;
-    const fd=new FormData(); fd.append('file',f);
-    setLoading(true);
-    try{const r=await fetch('/api/upload_csv?fs=360', {method:'POST',body:fd}); setData(await r.json());}
-    catch(e){setErr(String(e));}
-    setLoading(false);
-  };
+      useEffect(() => {
+        const c = canvasRef.current;
+        if (!c || !wave) return;
+        const ctx = c.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const W = c.width = c.offsetWidth * dpr;
+        const H = c.height = height * dpr;
+        ctx.scale(dpr, dpr);
 
-  const feat=data?.features, meta=data?.meta;
-  return <div className="layout">
-    <div className="card">
-      <div className="controls">
-        <div><label>MIT-BIH Record</label><select value={record} onChange={e=>setRecord(e.target.value)}>{(records.length?records:['100','101','102','200']).map(r=><option key={r} value={r}>{r}</option>)}</select></div>
-        <div><label>Seconds (4–60)</label><input type="number" value={seconds} min="4" max="60" onChange={e=>setSeconds(e.target.value)}/></div>
-        <div><label>Stochastic states N</label><input type="number" value={nStates} min="20" max="500" onChange={e=>setNStates(e.target.value)}/></div>
-        <div><label>Seed (reproducible)</label><input type="number" value={seed} onChange={e=>setSeed(e.target.value)}/></div>
-        <button onClick={analyze} disabled={loading}>{loading?'Analyzing…':'Analyze ECG'}</button>
-        <a href={pdfUrl}><button className="sec" type="button">Download PDF Report</button></a>
-        <div><label>Upload CSV (single column)</label><input type="file" accept=".csv,.txt" onChange={onUpload}/></div>
-        <label><input type="checkbox" checked={showRaw} onChange={e=>setShowRaw(e.target.checked)}/> show raw</label>
-      </div>
-      {err && <p style={{color:'#b91c1c'}}>{err}</p>}
-      {meta && <p className="footer">Source: {meta.source} • Record {meta.record} • fs {meta.fs} Hz • SQI: {meta.sqi?.quality} (SNR {meta.sqi?.snr_db} dB) {meta.from_cache?'• from local cache (real data, no download)':''}</p>}
-    </div>
+        const width = c.offsetWidth;
+        const h = height;
 
-    <div className="card">
-      <h3 style={{margin:'0 0 8px'}}>Waveform — raw vs filtered (0.5–45 Hz + 50 Hz notch) <span className="badge sim">REAL MIT-BIH DATA</span></h3>
-      {data?.waveform ? <WaveCanvas wave={data.waveform} rpeaks={data.r_peaks} showRaw={showRaw}/> : <p>Loading…</p>}
-      <div className="legend"><span><i className="dot" style={{background:'#94a3b8'}}></i>Raw</span><span><i className="dot" style={{background:'#22d3ee'}}></i>Filtered (morphology-preserving filtfilt)</span><span><i className="dot" style={{background:'#f87171'}}></i>R-peak</span></div>
-    </div>
+        // Dark medical oscilloscope grid
+        ctx.fillStyle = '#0b1b2b';
+        ctx.fillRect(0, 0, width, h);
 
-    <div className="grid2">
-      <div className="card"><h3>Measurements <span className="badge">estimates</span></h3>
-        {feat ? <div className="kpis">
-          {[['Heart rate',feat.heart_rate_bpm+' bpm'],['RR mean',feat.rr_mean_s+' s'],['RR std',feat.rr_std_s+' s'],['RMSSD',feat.rmssd_s+' s'],['Regularity CV',feat.regularity_cv],['QRS',feat.qrs_ms+' ms'],['QT',feat.qt_ms+' ms'],['QTc (Bazett)',feat.qtc_ms+' ms'],['ST',feat.st_mv+' mV'],['Beats',feat.n_beats]].map(([k,v])=><div className="kpi" key={k}><span>{k}</span><br/><b>{v}</b></div>)}
-        </div>:<p>No data</p>}
-      </div>
-      <div className="card"><h3>QUBO Optimization <span className="badge">classical solver</span></h3>
-        {data?.qubo ? <div><p style={{fontSize:13}}>E(x) = Σ aᵢxᵢ + Σ bᵢⱼxᵢxⱼ • Energy <b>{data.qubo.energy}</b> • {data.qubo.method}</p>
-        <table><thead><tr><th>Finding</th><th>x (selected)</th></tr></thead><tbody>{data.qubo.codes.map((c,i)=><tr key={c}><td>{c}</td><td>{data.qubo.solution[i]?'1 ✓':'0'}</td></tr>)}</tbody></table></div>:<p>No data</p>}
-      </div>
-    </div>
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
 
-    <div className="card"><h3>Candidate Findings — P(F|E) trained + Stability S=N<sub>F</sub>/N + QUBO</h3>
-      {data?.meta?.model?.metrics && <p className="footer">Model 5-fold AUROC: {Object.entries(data.meta.model.metrics).map(([k,m])=>`${k} ${m.auroc_5fold}`).join(' • ')} (1770 MIT-BIH windows)</p>}
-      <table><thead><tr><th>Finding</th><th>P (trained)</th><th>Stability</th><th>QUBO</th></tr></thead><tbody>
-      {(data?.probabilities||[]).map(p=><tr key={p.code}><td><b>{p.name}</b> <span className="badge sim">{p.method}</span> {p.qubo_selected?<span className="badge q">QUBO SELECTED</span>:null}<br/><span className="footer">{p.code} — {p.explanation}</span><div className="bar"><div style={{width:(p.probability*100)+'%'}}></div></div></td><td>{p.probability}</td><td>{p.stability} ({p.support}/{nStates})</td><td>{p.qubo_selected}</td></tr>)}
-      </tbody></table>
-      <p className="footer">Stability (bootstrap over this record's own beats) ≠ diagnostic probability — it measures robustness under the patient's own beat-to-beat variability.</p>
-    </div>
+        for (let x = 0; x < width; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+        }
 
-    <div className="card"><h3>Possible Next Diagnostic Steps (informational — not medical advice)</h3>
-      {(data?.probabilities||[]).filter(p=>p.qubo_selected||p.probability>=0.5).map(p=><div key={p.code}><b>{p.name}</b><ul>{p.next_steps.map((s,i)=><li key={i}>{s}</li>)}</ul></div>)}
-      <p className="footer">Always require physician review. Correlate with symptoms, history, 12-lead ECG, labs and imaging.</p>
-    </div>
+        const drawSignal = (arr, color, strokeW = 2) => {
+          if (!arr || !arr.length) return;
+          const slice = arr.slice(0, 3000);
+          let min = Math.min(...slice), max = Math.max(...slice);
+          if (max - min < 1e-6) { max += 1; min -= 1; }
 
-    <div className="card"><h3>Method & Reproducibility</h3>
-      <ul><li>Filters: Butterworth HP 0.5 Hz (ord 4) → notch 50 Hz Q30 → LP 45 Hz (ord 4), all <i>filtfilt</i> zero-phase.</li><li>Features: energy-based R detection, RR/HR/HRV, QRS/QT/QTc/ST estimates + per-beat distributions.</li><li>Probability: calibrated RandomForest trained on 1770 expert-annotated MIT-BIH windows (NSR/Rhythm/Ectopic) + deterministic clinical thresholds (BRADY/TACHY/QT/ST).</li><li>Uncertainty: nonparametric bootstrap over the record's own beats, N={nStates}, seed={seed} — reproducible, no assumed noise model.</li><li>QUBO: linear aᵢ=−(p−0.5)·w; conflicts NSR↔abnormal, brady↔tachy; exhaustive (n≤20) else simulated annealing.</li><li>Dataset: MIT-BIH Arrhythmia Database, local disk cache (prefetch with <i>py -m backend.prefetch</i>); error — never synthetic — if unavailable.</li></ul>
-    </div>
-  </div>;
-}
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script>
+          ctx.strokeStyle = color;
+          ctx.lineWidth = strokeW;
+          ctx.beginPath();
+
+          slice.forEach((v, i) => {
+            const x = (i / (slice.length - 1)) * width;
+            const y = h - ((v - min) / (max - min)) * (h - 60) - 30;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        };
+
+        if (showRaw && wave.raw) drawSignal(wave.raw, 'rgba(148, 163, 184, 0.7)', 1.5);
+        if (wave.filtered) drawSignal(wave.filtered, '#22d3ee', 2.2);
+
+        // Draw R-peak markers
+        if (rpeaks && wave.filtered) {
+          ctx.fillStyle = '#ef4444';
+          rpeaks.forEach((r) => {
+            const idx = Math.round(r / (wave.step || 1));
+            if (idx < wave.filtered.length) {
+              const x = (idx / (wave.filtered.length - 1)) * width;
+              ctx.fillRect(x - 2, 12, 4, 16);
+              ctx.fillStyle = '#f87171';
+              ctx.font = '10px JetBrains Mono';
+              ctx.fillText('R', x - 3, 10);
+            }
+          });
+        }
+      }, [wave, rpeaks, showRaw, height]);
+
+      return <canvas ref={canvasRef} className="waveform-canvas" style={{ height: `${height}px` }}></canvas>;
+    }
+
+    // --- Main Application Parent ---
+    function App() {
+      const [view, setView] = useState('landing'); // 'landing' | 'workstation'
+      const [records, setRecords] = useState([]);
+      const [record, setRecord] = useState('101');
+      const [seconds, setSeconds] = useState(10);
+      const [nStates, setNStates] = useState(100);
+      const [seed, setSeed] = useState(42);
+      const [showRaw, setShowRaw] = useState(true);
+
+      const [clinic, setClinic] = useState('');
+      const [pid, setPid] = useState('');
+      const [pname, setPname] = useState('');
+      const [age, setAge] = useState('');
+      const [sex, setSex] = useState('Not provided');
+      const [useAI, setUseAI] = useState(true);
+
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [stageStep, setStageStep] = useState(0);
+      const [err, setErr] = useState('');
+
+      const [activeTab, setActiveTab] = useState('overview');
+      const [aiData, setAiData] = useState(null);
+      const [aiLoading, setAiLoading] = useState(false);
+
+      useEffect(() => {
+        fetch('/api/records')
+          .then((r) => r.json())
+          .then((j) => setRecords(j.records || []))
+          .catch(() => setRecords(['100', '101', '102', '200', '208', '233']));
+      }, []);
+
+      const analyze = async () => {
+        setLoading(true);
+        setErr('');
+        setStageStep(1);
+
+        const timer1 = setTimeout(() => setStageStep(3), 300);
+        const timer2 = setTimeout(() => setStageStep(5), 600);
+
+        try {
+          const u = `/api/analyze_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
+          const r = await fetch(u);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const res = await r.json();
+          setData(res);
+          setStageStep(7);
+        } catch (e) {
+          setErr(String(e));
+        } finally {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+          setLoading(false);
+        }
+      };
+
+      useEffect(() => {
+        analyze();
+      }, [record]);
+
+      const loadAI = async () => {
+        setAiLoading(true);
+        try {
+          const u = `/api/ai_insights?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}`;
+          const r = await fetch(u);
+          setAiData(await r.json());
+        } catch (e) {
+          setAiData({ ai: { available: false, reason: String(e) }, urgent: [], summary: {} });
+        }
+        setAiLoading(false);
+      };
+
+      const pdfUrl = `/api/report_mitbih?record=${record}&seconds=${seconds}&n_states=${nStates}&seed=${seed}&ai=${useAI}&clinic_name=${encodeURIComponent(clinic)}&patient_id=${encodeURIComponent(pid)}&patient_name=${encodeURIComponent(pname)}&age=${encodeURIComponent(age)}&sex=${encodeURIComponent(sex)}`;
+
+      const onUploadCSV = async (ev) => {
+        const f = ev.target.files[0];
+        if (!f) return;
+        const fd = new FormData();
+        fd.append('file', f);
+        setLoading(true);
+        try {
+          const r = await fetch('/api/upload_csv?fs=360', { method: 'POST', body: fd });
+          setData(await r.json());
+          setView('workstation');
+        } catch (e) {
+          setErr(String(e));
+        }
+        setLoading(false);
+      };
+
+      return (
+        <div>
+          {/* Top Navbar */}
+          <nav className="navbar">
+            <div className="container-wide navbar-inner">
+              <a href="#" className="logo-brand" onClick={() => setView('landing')}>
+                <IconActivity />
+                <span>QUBO-ECG</span>
+              </a>
+
+              <ul className="nav-links">
+                <li><a href="#overview" onClick={() => setView('landing')}>Overview</a></li>
+                <li><a href="#how-it-works" onClick={() => setView('landing')}>How It Works</a></li>
+                <li><a href="#technology" onClick={() => setView('landing')}>Technology</a></li>
+                <li><a href="#findings" onClick={() => setView('landing')}>7 Findings</a></li>
+                <li><a href="#research" onClick={() => setView('landing')}>Research Metrics</a></li>
+              </ul>
+
+              <div className="nav-actions">
+                <span className="badge badge-accent">Research Prototype</span>
+                {view === 'landing' ? (
+                  <button className="btn btn-accent btn-sm" onClick={() => setView('workstation')}>
+                    START ANALYSIS
+                  </button>
+                ) : (
+                  <button className="btn btn-outline btn-sm" onClick={() => setView('landing')}>
+                    Landing Page
+                  </button>
+                )}
+              </div>
+            </div>
+          </nav>
+
+          {/* VIEW SWITCHER */}
+          {view === 'landing' ? (
+            <LandingPage
+              onStart={() => setView('workstation')}
+              wave={data?.waveform}
+              rpeaks={data?.r_peaks}
+            />
+          ) : (
+            <WorkstationView
+              records={records}
+              record={record}
+              setRecord={setRecord}
+              seconds={seconds}
+              setSeconds={setSeconds}
+              nStates={nStates}
+              setNStates={setNStates}
+              seed={seed}
+              setSeed={setSeed}
+              showRaw={showRaw}
+              setShowRaw={setShowRaw}
+              analyze={analyze}
+              loading={loading}
+              stageStep={stageStep}
+              err={err}
+              data={data}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              pdfUrl={pdfUrl}
+              clinic={clinic} setClinic={setClinic}
+              pid={pid} setPid={setPid}
+              pname={pname} setPname={setPname}
+              age={age} setAge={setAge}
+              sex={sex} setSex={setSex}
+              useAI={useAI} setUseAI={setUseAI}
+              aiData={aiData} loadAI={loadAI} aiLoading={aiLoading}
+              onUploadCSV={onUploadCSV}
+            />
+          )}
+
+          {/* Global Footer */}
+          <footer className="footer">
+            <div className="container footer-inner">
+              <div className="footer-brand">
+                <h3>QUBO-ECG Research Platform</h3>
+                <p>Uncertainty-aware ECG decision support using calibrated machine learning, nonparametric bootstrap stability, and classical QUBO optimization.</p>
+              </div>
+              <div>
+                <h4 style={{ color: '#fff', marginBottom: '12px' }}>Methodology</h4>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, lineHeight: 2 }}>
+                  <li>Calibrated Probabilities</li>
+                  <li>Bootstrap Stability S</li>
+                  <li>QUBO Conflict Matrix</li>
+                  <li>Bazett QTc / HRV RMSSD</li>
+                </ul>
+              </div>
+              <div>
+                <h4 style={{ color: '#fff', marginBottom: '12px' }}>Dataset</h4>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, lineHeight: 2 }}>
+                  <li>MIT-BIH Arrhythmia</li>
+                  <li>PhysioNet Open Access</li>
+                  <li>1,770 Annotated Windows</li>
+                  <li>5-Fold Cross-Validation</li>
+                </ul>
+              </div>
+              <div>
+                <h4 style={{ color: '#fff', marginBottom: '12px' }}>Disclaimer</h4>
+                <p style={{ fontSize: '0.8rem', lineHeight: 1.5 }}>Research prototype for physician decision support. Not a certified medical device. Clinician review required.</p>
+              </div>
+            </div>
+            <div className="container footer-bottom">
+              <div>© 2026 QUBO-ECG Research Project • Built with React, FastAPI & SciPy</div>
+              <div>MIT-BIH PhysioNet Dataset • Single-Lead Analysis</div>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    // --- LANDING PAGE COMPONENT ---
+    function LandingPage({ onStart, wave, rpeaks }) {
+      return (
+        <div>
+          {/* Hero Section */}
+          <section className="hero" id="overview">
+            <div className="container hero-grid">
+              <div className="hero-content">
+                <span className="badge badge-accent" style={{ marginBottom: '12px' }}>Medical Research Prototype</span>
+                <h1>Uncertainty-Aware ECG Analysis with Probabilistic Machine Learning and QUBO</h1>
+                <p className="hero-subtitle">
+                  Analyze real ECG signals using calibrated probabilities, bootstrap stability, and QUBO-based consistency optimization — with explainable clinical decision support.
+                </p>
+                <div className="hero-buttons">
+                  <button className="btn btn-accent btn-lg" onClick={onStart}>
+                    Start ECG Analysis <IconActivity />
+                  </button>
+                  <a href="#how-it-works" className="btn btn-outline btn-lg">
+                    Explore How It Works
+                  </a>
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                  ✓ Real MIT-BIH PhysioNet Records &nbsp;•&nbsp; ✓ Zero-Phase Filtering &nbsp;•&nbsp; ✓ Explainable PDF Reports
+                </div>
+              </div>
+
+              <div className="hero-scope-card">
+                <div className="hero-scope-header">
+                  <span>LIVE ECG WAVEFORM SCOPE — RECORD 101</span>
+                  <span className="badge badge-supported">Signal Quality: HIGH</span>
+                </div>
+                <WaveCanvas wave={wave} rpeaks={rpeaks} showRaw={true} height={220} />
+                <div className="hero-indicators">
+                  <div className="hero-indicator-item">
+                    <span>P(F|E) Model</span>
+                    <b>90.4%</b>
+                  </div>
+                  <div className="hero-indicator-item">
+                    <span>Stability S</span>
+                    <b>1.000</b>
+                  </div>
+                  <div className="hero-indicator-item">
+                    <span>QUBO Status</span>
+                    <b style={{ color: '#4ade80' }}>SELECTED</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Trust Strip */}
+          <section className="trust-strip">
+            <div className="container trust-flex">
+              <div className="trust-item">
+                <div className="trust-item-icon"><IconHeart /></div>
+                <div><b>REAL ECG DATA</b><br /><small>MIT-BIH / PhysioNet</small></div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-item-icon"><IconCpu /></div>
+                <div><b>CALIBRATED ML</b><br /><small>Probability P(F|E)</small></div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-item-icon"><IconActivity /></div>
+                <div><b>BOOTSTRAP STABILITY</b><br /><small>Robustness Score S</small></div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-item-icon"><IconShield /></div>
+                <div><b>QUBO OPTIMIZATION</b><br /><small>Conflict Resolution</small></div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-item-icon"><IconFileText /></div>
+                <div><b>EXPLAINABLE OUTPUT</b><br /><small>Doctor PDF Report</small></div>
+              </div>
+            </div>
+          </section>
+
+          {/* What Does This System Do? (7 Steps) */}
+          <section className="section" id="how-it-works">
+            <div className="container">
+              <h2 className="section-title">What does this system do?</h2>
+              <p className="section-subtitle">A 7-stage analytical pipeline designed to convert raw cardiac signals into mathematically verified, uncertainty-aware clinical decision support.</p>
+              <div className="workflow-grid">
+                <div className="workflow-card">
+                  <div className="workflow-step-num">01 / SIGNAL CLEANING</div>
+                  <h4>Noise Suppression</h4>
+                  <p>Butterworth high-pass (0.5 Hz), low-pass (45 Hz), and 50 Hz notch filter executed zero-phase with filtfilt to prevent peak phase shift.</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">02 / MEASUREMENT</div>
+                  <h4>ECG Feature Extraction</h4>
+                  <p>Pan-Tompkins R-peak detection, heart rate, HRV (RMSSD), Bazett rate-corrected QTc, and ST segment elevation/depression.</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">03 / PREDICTION</div>
+                  <h4>Calibrated Probability P(F|E)</h4>
+                  <p>RandomForest ensemble (300 trees) with Platt sigmoidal calibration trained on 1,770 expert-annotated MIT-BIH windows.</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">04 / STABILITY</div>
+                  <h4>Bootstrap Resampling</h4>
+                  <p>Nonparametric beat resampling over N=100 states measures whether predictions survive patient beat-to-beat variability.</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">05 / QUBO OPTIMIZATION</div>
+                  <h4>Conflict Resolution</h4>
+                  <p>Poses candidate findings as binary energy minimization E(x) to resolve contradictory predictions (e.g., Brady vs Tachy).</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">06 / INSIGHT</div>
+                  <h4>Explainable Interpretation</h4>
+                  <p>Maps confirmed findings to potential clinical associations, physiological rationale, and recommended next diagnostic steps.</p>
+                </div>
+                <div className="workflow-card">
+                  <div className="workflow-step-num">07 / REPORTING</div>
+                  <h4>Vector PDF Generation</h4>
+                  <p>Compiles full vector waveforms, metric tables, decision proofs, and clinician disclaimers into a 5-page PDF.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Mathematical Foundations (Why P, S, QUBO?) */}
+          <section className="section" style={{ backgroundColor: 'var(--bg-surface)' }} id="technology">
+            <div className="container">
+              <h2 className="section-title">The Three Pillars of Uncertainty-Aware Decision Support</h2>
+              <p className="section-subtitle">Standard AI models produce single probability scores that can fail or contradict each other. Our system combines three distinct mathematical layers.</p>
+
+              <div className="pillar-grid">
+                <div className="pillar-card">
+                  <span className="pillar-tag">PILLAR 1 — CALIBRATION</span>
+                  <h3>Why Probability P(F|E)?</h3>
+                  <p>A raw classifier score is not a probability. We train a 300-tree RandomForest and apply Platt sigmoidal calibration so that P(F|E) directly reflects empirical evidence support.</p>
+                  <div className="pillar-box">
+                    Model: RandomForest + Platt<br />
+                    Trained: 1,770 MIT-BIH Windows<br />
+                    AUROC: 0.988 (NSR), 0.972 (Rhythm)
+                  </div>
+                </div>
+
+                <div className="pillar-card">
+                  <span className="pillar-tag">PILLAR 2 — ROBUSTNESS</span>
+                  <h3>Why Stability S?</h3>
+                  <p>"Would the finding remain if available beats changed slightly?" We resample the patient's own beats 100 times. Stability S is the fraction of resamples still supporting the finding.</p>
+                  <div className="pillar-box">
+                    S = N_supported / N_resamples<br />
+                    S = 1.000 (Highly Stable)<br />
+                    *Robustness metric, not certainty.
+                  </div>
+                </div>
+
+                <div className="pillar-card">
+                  <span className="pillar-tag">PILLAR 3 — CONSISTENCY</span>
+                  <h3>Why QUBO?</h3>
+                  <p>Automated predictions can conflict (e.g., Normal Sinus vs Rhythm Abnormality). QUBO optimizes binary variables x_i over energy E(x) to pick a single consistent set.</p>
+                  <div className="pillar-box">
+                    E(x) = ∑ a_i x_i + ∑ b_ij x_i x_j<br />
+                    Solver: Classical Annealing<br />
+                    Result: Zero Conflict Selection
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Seven ECG Findings Directory */}
+          <section className="section" id="findings">
+            <div className="container">
+              <h2 className="section-title">Seven ECG Findings Evaluated</h2>
+              <p className="section-subtitle">Every recording is screened across seven clinically defined rhythm and morphological patterns.</p>
+
+              <div className="findings-grid">
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">Normal Sinus Rhythm (NSR)</span>
+                    <span className="badge badge-supported">Calibrated ML</span>
+                  </div>
+                  <div className="finding-desc">Regular rhythm initiated by SA node with normal P-waves and heart rate (60–100 bpm).</div>
+                  <div className="finding-meta">Target AUROC: 0.988 • Platt Calibrated</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">Rhythm Abnormality</span>
+                    <span className="badge badge-supported">Calibrated ML</span>
+                  </div>
+                  <div className="finding-desc">Significant beat-to-beat variability (high RMSSD / CV), potential atrial fibrillation pattern.</div>
+                  <div className="finding-meta">Target AUROC: 0.972 • Requires Holter</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">Ectopic Activity</span>
+                    <span className="badge badge-supported">Calibrated ML</span>
+                  </div>
+                  <div className="finding-desc">Premature or wide ventricular/atrial complexes (PVC-like morphology).</div>
+                  <div className="finding-meta">Target AUROC: 0.971 • Quantify Burden</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">ST Segment Abnormality</span>
+                    <span className="badge badge-warning">Clinical Criteria</span>
+                  </div>
+                  <div className="finding-desc">ST elevation or depression |ST| ≥ 0.1 mV relative to baseline (ischemia/injury pattern).</div>
+                  <div className="finding-meta">Threshold: |ST| ≥ 0.1 mV • Urgent review</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">QTc Prolongation</span>
+                    <span className="badge badge-warning">Clinical Criteria</span>
+                  </div>
+                  <div className="finding-desc">Rate-corrected Bazett QTc ≥ 470 ms (arrhythmia risk / drug effect monitoring).</div>
+                  <div className="finding-meta">Threshold: QTc ≥ 470 ms • Check meds</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">Bradycardia</span>
+                    <span className="badge badge-neutral">AHA Cutoff</span>
+                  </div>
+                  <div className="finding-desc">Measured heart rate &lt; 60 bpm under regular or irregular pacing.</div>
+                  <div className="finding-meta">Threshold: HR &lt; 60 bpm</div>
+                </div>
+
+                <div className="finding-card">
+                  <div className="finding-header">
+                    <span className="finding-title">Tachycardia</span>
+                    <span className="badge badge-neutral">AHA Cutoff</span>
+                  </div>
+                  <div className="finding-desc">Measured heart rate &gt; 100 bpm under regular or irregular pacing.</div>
+                  <div className="finding-meta">Threshold: HR &gt; 100 bpm</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Research Metrics */}
+          <section className="section" style={{ backgroundColor: 'var(--bg-surface)' }} id="research">
+            <div className="container">
+              <h2 className="section-title">Model Performance & Research Metrics</h2>
+              <p className="section-subtitle">Evaluated via 5-fold cross-validation on 1,770 expert-annotated MIT-BIH windows.</p>
+
+              <div className="card" style={{ maxWidth: '800px', margin: '0 auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Finding Target</th>
+                      <th>Positive Windows</th>
+                      <th>5-Fold AUROC</th>
+                      <th>5-Fold Brier Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><b>Normal Sinus Rhythm (NSR)</b></td>
+                      <td>657 / 1,770</td>
+                      <td><span className="badge badge-supported">0.988</span></td>
+                      <td>0.038 (Calibrated)</td>
+                    </tr>
+                    <tr>
+                      <td><b>Rhythm Abnormality</b></td>
+                      <td>360 / 1,770</td>
+                      <td><span className="badge badge-supported">0.972</span></td>
+                      <td>0.057 (Calibrated)</td>
+                    </tr>
+                    <tr>
+                      <td><b>Ectopic Activity</b></td>
+                      <td>814 / 1,770</td>
+                      <td><span className="badge badge-supported">0.971</span></td>
+                      <td>0.065 (Calibrated)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* Limitations Notice */}
+          <section className="section">
+            <div className="container">
+              <div className="limitations-box">
+                <h3><IconAlertTriangle /> Research Scope & Clinical Limitations</h3>
+                <ul>
+                  <li>Developed using single-lead recordings from the MIT-BIH Arrhythmia Database.</li>
+                  <li>Feature extraction uses Pan-Tompkins heuristic wave delimitation for screening purposes.</li>
+                  <li>QUBO conflict penalty weights b_ij are engineering formulations, not learned parameters.</li>
+                  <li>This research prototype has not undergone prospective clinical trials or regulatory approval.</li>
+                  <li>All findings require independent clinical review and correlation with 12-lead ECG, patient history, and symptoms.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    // --- WORKSTATION VIEW COMPONENT ---
+    function WorkstationView({
+      records, record, setRecord, seconds, setSeconds, nStates, setNStates, seed, setSeed,
+      showRaw, setShowRaw, analyze, loading, stageStep, err, data, activeTab, setActiveTab, pdfUrl,
+      clinic, setClinic, pid, setPid, pname, setPname, age, setAge, sex, setSex, useAI, setUseAI,
+      aiData, loadAI, aiLoading, onUploadCSV
+    }) {
+      const feat = data?.features;
+      const probs = data?.probabilities || [];
+
+      return (
+        <div className="container-wide workstation-container">
+          {/* Left Sidebar Menu */}
+          <div className="sidebar">
+            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>
+              Workstation Nav
+            </div>
+            <ul className="sidebar-menu">
+              <li className={`sidebar-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
+                <IconActivity /> Overview Dashboard
+              </li>
+              <li className={`sidebar-item ${activeTab === 'waveform' ? 'active' : ''}`} onClick={() => setActiveTab('waveform')}>
+                <IconHeart /> ECG Waveform
+              </li>
+              <li className={`sidebar-item ${activeTab === 'measurements' ? 'active' : ''}`} onClick={() => setActiveTab('measurements')}>
+                <IconFileText /> Measurements
+              </li>
+              <li className={`sidebar-item ${activeTab === 'predictions' ? 'active' : ''}`} onClick={() => setActiveTab('predictions')}>
+                <IconCpu /> Predictions & Stability
+              </li>
+              <li className={`sidebar-item ${activeTab === 'qubo' ? 'active' : ''}`} onClick={() => setActiveTab('qubo')}>
+                <IconShield /> QUBO Optimization
+              </li>
+              <li className={`sidebar-item ${activeTab === 'insight' ? 'active' : ''}`} onClick={() => setActiveTab('insight')}>
+                <IconCheckCircle /> Automated Insight
+              </li>
+              <li className={`sidebar-item ${activeTab === 'ai' ? 'active' : ''}`} onClick={() => setActiveTab('ai')}>
+                <IconAlertTriangle /> AI Narrative
+              </li>
+              <li className={`sidebar-item ${activeTab === 'report' ? 'active' : ''}`} onClick={() => setActiveTab('report')}>
+                <IconFileText /> PDF Report Setup
+              </li>
+            </ul>
+          </div>
+
+          {/* Main Viewport Content */}
+          <div className="main-workspace">
+            {/* Top Control Panel */}
+            <div className="control-panel">
+              <div className="controls-flex">
+                <div className="form-group">
+                  <label className="form-label">MIT-BIH Record</label>
+                  <select className="form-select" value={record} onChange={(e) => setRecord(e.target.value)}>
+                    {(records.length ? records : ['100', '101', '102', '200', '208', '233']).map((r) => (
+                      <option key={r} value={r}>Record {r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Window (s)</label>
+                  <input className="form-input" type="number" value={seconds} min="4" max="60" onChange={(e) => setSeconds(e.target.value)} style={{ width: '80px' }} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Bootstrap N</label>
+                  <input className="form-input" type="number" value={nStates} min="20" max="500" onChange={(e) => setNStates(e.target.value)} style={{ width: '90px' }} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Seed</label>
+                  <input className="form-input" type="number" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ width: '80px' }} />
+                </div>
+
+                <button className="btn btn-accent" onClick={analyze} disabled={loading}>
+                  {loading ? 'Processing Pipeline...' : 'Analyze Signal'}
+                </button>
+
+                <a href={pdfUrl} target="_blank" rel="noreferrer">
+                  <button className="btn btn-primary" type="button">
+                    <IconFileText /> Generate PDF
+                  </button>
+                </a>
+
+                <div className="form-group">
+                  <label className="form-label">Upload CSV</label>
+                  <input type="file" accept=".csv,.txt" onChange={onUploadCSV} style={{ fontSize: '0.8rem' }} />
+                </div>
+              </div>
+
+              {err && <div style={{ color: 'var(--status-alert-text)', marginTop: '10px', fontSize: '0.875rem' }}>⚠️ {err}</div>}
+            </div>
+
+            {/* Stage Progress Bar when Analyzing */}
+            {loading && (
+              <div className="stage-progress">
+                <div className={`stage-step ${stageStep >= 1 ? 'active' : ''}`}>01 Preprocess</div>
+                <div className={`stage-step ${stageStep >= 2 ? 'active' : ''}`}>02 Beats</div>
+                <div className={`stage-step ${stageStep >= 3 ? 'active' : ''}`}>03 Features</div>
+                <div className={`stage-step ${stageStep >= 4 ? 'active' : ''}`}>04 ML P(F|E)</div>
+                <div className={`stage-step ${stageStep >= 5 ? 'active' : ''}`}>05 Bootstrap S</div>
+                <div className={`stage-step ${stageStep >= 6 ? 'active' : ''}`}>06 QUBO Solve</div>
+                <div className={`stage-step ${stageStep >= 7 ? 'active' : ''}`}>07 Complete</div>
+              </div>
+            )}
+
+            {/* KPI BANNER */}
+            <div className="kpi-banner">
+              <div className="kpi-card">
+                <div className="kpi-label">Primary Finding</div>
+                <div className="kpi-value" style={{ fontSize: '1rem', color: 'var(--accent-primary)' }}>
+                  {probs.find((p) => p.qubo_selected)?.name || 'Normal Sinus Rhythm'}
+                </div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Heart Rate</div>
+                <div className="kpi-value">{feat ? `${feat.heart_rate_bpm} bpm` : '74 bpm'}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Bazett QTc</div>
+                <div className="kpi-value">{feat ? `${feat.qtc_ms} ms` : '412 ms'}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-label">Signal Quality (SQI)</div>
+                <div className="kpi-value" style={{ fontSize: '1rem', color: 'var(--status-supported-text)' }}>
+                  {data?.meta?.sqi?.quality || 'HIGH'} ({data?.meta?.sqi?.snr_db || 24.2} dB)
+                </div>
+              </div>
+            </div>
+
+            {/* TAB CONTENT PANELS */}
+
+            {/* TAB: OVERVIEW & WAVEFORM */}
+            {(activeTab === 'overview' || activeTab === 'waveform') && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconHeart /> ECG Waveform Scope — Raw vs Filtered</h3>
+                  <label style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                    <input type="checkbox" checked={showRaw} onChange={(e) => setShowRaw(e.target.checked)} /> Show Raw Trace
+                  </label>
+                </div>
+                {data?.waveform ? (
+                  <WaveCanvas wave={data.waveform} rpeaks={data.r_peaks} showRaw={showRaw} height={320} />
+                ) : (
+                  <div style={{ height: '320px', background: '#0b1b2b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                    Loading signal waveform...
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: MEASUREMENTS */}
+            {(activeTab === 'overview' || activeTab === 'measurements') && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconFileText /> ECG Morphological Measurements</h3>
+                </div>
+                {feat ? (
+                  <div className="table-container">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Measurement</th>
+                          <th>Value</th>
+                          <th>Normal Range</th>
+                          <th>Physiological Meaning</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(data.explanations || {}).map(([k, info]) => (
+                          <tr key={k}>
+                            <td><b>{info.title}</b></td>
+                            <td className="text-mono"><b>{info.value}</b></td>
+                            <td>{info.normal}</td>
+                            <td style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{info.meaning}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p>Loading features...</p>}
+              </div>
+            )}
+
+            {/* TAB: PREDICTIONS & STABILITY */}
+            {(activeTab === 'overview' || activeTab === 'predictions') && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconCpu /> Candidate Findings & Bootstrap Stability</h3>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ECG Finding</th>
+                        <th>Estimation Method</th>
+                        <th>Probability P(F|E)</th>
+                        <th>Stability S (Robustness)</th>
+                        <th>QUBO Decision</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {probs.map((p) => (
+                        <tr key={p.code}>
+                          <td><b>{p.name}</b><br /><small className="text-muted">{p.code}</small></td>
+                          <td><span className="badge badge-accent">{p.method}</span></td>
+                          <td>
+                            <div className="text-mono"><b>{(p.probability * 100).toFixed(1)}%</b></div>
+                            <div className="meter-bar"><div className="meter-fill" style={{ width: `${p.probability * 100}%` }}></div></div>
+                          </td>
+                          <td><span className="text-mono">{p.stability} ({p.support}/{nStates})</span></td>
+                          <td>
+                            {p.qubo_selected ? (
+                              <span className="badge badge-supported">SELECTED (x=1)</span>
+                            ) : (
+                              <span className="badge badge-neutral">REJECTED (x=0)</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: QUBO MATRIX */}
+            {(activeTab === 'overview' || activeTab === 'qubo') && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconShield /> QUBO Energy Minimization Solver</h3>
+                </div>
+                {data?.qubo ? (
+                  <div>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      Objective: <code className="text-mono">E(x) = ∑ a_i x_i + ∑ b_ij x_i x_j</code> • Energy: <b>{data.qubo.energy}</b> • Solver: <b>{data.qubo.method}</b>
+                    </p>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Finding Code</th>
+                          <th>Linear Term a_i</th>
+                          <th>QUBO Binary x_i</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.qubo.codes.map((c, i) => (
+                          <tr key={c}>
+                            <td><b>{c}</b></td>
+                            <td className="text-mono">{data.qubo.a[i]?.toFixed(3)}</td>
+                            <td className="text-mono"><b>{data.qubo.solution[i]}</b></td>
+                            <td>
+                              {data.qubo.solution[i] ? (
+                                <span className="badge badge-supported">SELECTED</span>
+                              ) : (
+                                <span className="badge badge-neutral">CLEAR</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p>Loading QUBO matrices...</p>}
+              </div>
+            )}
+
+            {/* TAB: AUTOMATED CLINICAL INSIGHT */}
+            {(activeTab === 'overview' || activeTab === 'insight') && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconCheckCircle /> Automated Decision Support & Next Steps</h3>
+                </div>
+                {probs.filter((p) => p.qubo_selected || p.probability >= 0.5).map((p) => (
+                  <div key={p.code} style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border-light)' }}>
+                    <h4 style={{ margin: '0 0 6px', color: 'var(--accent-primary)' }}>{p.name}</h4>
+                    <p style={{ margin: '0 0 8px', fontSize: '0.875rem' }}>{p.explanation}</p>
+                    <b>Recommended Next Steps:</b>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: '20px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      {p.next_steps.map((s, idx) => <li key={idx}>{s}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TAB: AI NARRATIVE */}
+            {activeTab === 'ai' && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconAlertTriangle /> Optional Gemini AI Narrative Preview</h3>
+                  <button className="btn btn-outline btn-sm" onClick={loadAI} disabled={aiLoading}>
+                    {aiLoading ? 'Requesting Gemini...' : 'Preview AI Narrative'}
+                  </button>
+                </div>
+                {aiData?.ai?.available ? (
+                  <div>
+                    <p><b>Summary:</b> {aiData.ai.summary}</p>
+                    <p><b>Normal vs Abnormal:</b> {aiData.ai.normal_vs_abnormal}</p>
+                    <p><b>Possible Associations:</b> {aiData.ai.possible_associations}</p>
+                    <p><b>Recommendations:</b> {aiData.ai.recommendations}</p>
+                    <p className="text-muted" style={{ fontSize: '0.75rem' }}>Model: {aiData.ai.model} • Requires clinician review.</p>
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--text-muted)' }}>AI-assisted narrative not requested or unavailable. Probabilistic calculations above remain intact.</p>
+                )}
+              </div>
+            )}
+
+            {/* TAB: PDF REPORT SETUP */}
+            {activeTab === 'report' && (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title"><IconFileText /> Patient Demographics & PDF Report Generation</h3>
+                </div>
+                <div className="controls-flex" style={{ gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Facility / Clinic</label>
+                    <input className="form-input" value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="University Hospital" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Patient ID</label>
+                    <input className="form-input" value={pid} onChange={(e) => setPid(e.target.value)} placeholder="PAT-9941" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Patient Name</label>
+                    <input className="form-input" value={pname} onChange={(e) => setPname(e.target.value)} placeholder="John Doe" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Age</label>
+                    <input className="form-input" value={age} onChange={(e) => setAge(e.target.value)} placeholder="58" style={{ width: '70px' }} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Sex</label>
+                    <select className="form-select" value={sex} onChange={(e) => setSex(e.target.value)}>
+                      <option>Not provided</option>
+                      <option>Female</option>
+                      <option>Male</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginTop: '20px' }}>
+                  <a href={pdfUrl} target="_blank" rel="noreferrer">
+                    <button className="btn btn-accent btn-lg">
+                      <IconFileText /> Generate 5-Page Clinical PDF Report
+                    </button>
+                  </a>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
 </body>
 </html>

@@ -49,7 +49,8 @@ def model_info() -> dict:
     global _report
     if _report is None:
         if os.path.exists(REPORT_PATH):
-            _report = json.loads(open(REPORT_PATH).read())
+            with open(REPORT_PATH, encoding="utf-8") as fh:
+                _report = json.loads(fh.read())
         else:
             _report = {"error": "model_report.json missing - run py -m backend.train_model"}
     b = _load_bundle()
@@ -64,43 +65,57 @@ def _feature_row(feat: dict, names: list, medians: np.ndarray) -> np.ndarray:
     return row.reshape(1, -1)
 
 
+def _rows(feat_dicts: list, names: list, medians: np.ndarray) -> np.ndarray:
+    """Batched feature matrix with median imputation (same math as _feature_row)."""
+    X = np.array([[float(f.get(k, float("nan"))) for k in names] for f in feat_dicts],
+                 dtype=float)
+    bad = ~np.isfinite(X)
+    if bad.any():
+        X[bad] = np.take(medians, np.where(bad)[1])
+    return X
+
+
 def _criterion_prob(met: bool) -> float:
     return 0.99 if met else 0.01
 
 
-def estimate_probabilities(feat: dict) -> list:
+def estimate_probabilities_batch(feat_dicts: list) -> list:
+    """Batched version: 3 model calls total for N states instead of 3N.
+    Identical outputs to calling estimate_probabilities per dict."""
     b = _load_bundle()
-    X = _feature_row(feat, b["features"], np.asarray(b["medians"], dtype=float))
+    med = np.asarray(b["medians"], dtype=float)
+    X = _rows(feat_dicts, b["features"], med)
     ml = {}
     for t in _ML_TARGETS:
-        p = float(b["models"][t].predict_proba(X)[0, 1])
-        ml[t] = max(0.01, min(0.99, p))
+        ml[t] = np.clip(b["models"][t].predict_proba(X)[:, 1], 0.01, 0.99)
 
-    hr = float(feat.get("heart_rate_bpm", 70) or 70)
-    qtc = float(feat.get("qtc_ms", 420) or 420)
-    st = abs(float(feat.get("st_mv", 0) or 0))
-    n = int(feat.get("n_beats", 0))
+    out_all = []
+    for i, feat in enumerate(feat_dicts):
+        hr = float(feat.get("heart_rate_bpm", 70) or 70)
+        qtc = float(feat.get("qtc_ms", 420) or 420)
+        st = abs(float(feat.get("st_mv", 0) or 0))
+        n = int(feat.get("n_beats", 0))
+        probs = {
+            "NSR": (float(ml["NSR"][i]), "trained-ml"),
+            "RHYTHM_ABN": (float(ml["RHYTHM_ABN"][i]), "trained-ml"),
+            "ECTOPIC": (float(ml["ECTOPIC"][i]), "trained-ml"),
+            "ST_ABN": (_criterion_prob(st >= 0.1), "measurement-criterion"),
+            "QT_PROLONG": (_criterion_prob(qtc >= 470.0), "measurement-criterion"),
+            "BRADY": (_criterion_prob(hr < 60.0), "measurement-criterion"),
+            "TACHY": (_criterion_prob(hr > 100.0), "measurement-criterion"),
+        }
+        if n < 3:
+            # Too few beats for reliable measurement: report maximum uncertainty
+            probs = {k: ((0.5, m + "+low-beats") if m == "trained-ml" else (v, m))
+                     for k, (v, m) in probs.items()}
+        out_all.append([{"id": f["id"], "code": f["code"], "name": f["name"],
+                         "probability": round(float(probs[f["code"]][0]), 3),
+                         "method": probs[f["code"]][1]} for f in FINDINGS])
+    return out_all
 
-    probs = {
-        "NSR": (ml["NSR"], "trained-ml"),
-        "RHYTHM_ABN": (ml["RHYTHM_ABN"], "trained-ml"),
-        "ECTOPIC": (ml["ECTOPIC"], "trained-ml"),
-        "ST_ABN": (_criterion_prob(st >= 0.1), "measurement-criterion"),
-        "QT_PROLONG": (_criterion_prob(qtc >= 470.0), "measurement-criterion"),
-        "BRADY": (_criterion_prob(hr < 60.0), "measurement-criterion"),
-        "TACHY": (_criterion_prob(hr > 100.0), "measurement-criterion"),
-    }
-    if n < 3:
-        # Too few beats for reliable measurement: report maximum uncertainty
-        probs = {k: ((0.5, m + "+low-beats") if m == "trained-ml" else (v, m))
-                 for k, (v, m) in probs.items()}
 
-    out = []
-    for f in FINDINGS:
-        p, method = probs[f["code"]]
-        out.append({"id": f["id"], "code": f["code"], "name": f["name"],
-                    "probability": round(float(p), 3), "method": method})
-    return out
+def estimate_probabilities(feat: dict) -> list:
+    return estimate_probabilities_batch([feat])[0]
 
 
 NEXT_STEPS = {
