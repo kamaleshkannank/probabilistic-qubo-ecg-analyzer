@@ -44,17 +44,21 @@ def _read_cached(path: str):
 
 def download_record(record: str) -> dict:
     """Download full record from PhysioNet; cache on disk (best effort)."""
-    import wfdb
+    import tempfile, wfdb, shutil
     record = str(record)
-    rec = wfdb.rdrecord(record, pn_dir="mitdb", physical=True)
-    sig = np.array(rec.p_signal[:, 0], dtype=np.float32)
-    fs = float(rec.fs)
-    units = rec.units[0] if rec.units else "mV"
+    tmpdir = tempfile.mkdtemp()
+    try:
+        rec = wfdb.rdrecord(record, pn_dir="mitdb", physical=True, dl_dir=tmpdir)
+        sig = np.array(rec.p_signal[:, 0], dtype=np.float32)
+        fs = float(rec.fs)
+        units = rec.units[0] if rec.units else "mV"
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
     try:
         os.makedirs(os.path.dirname(_cache_path(record)), exist_ok=True)
         np.savez_compressed(_cache_path(record), signal=sig, fs=fs, units=units)
-    except OSError:
-        pass  # disk full etc: serve from memory, retry cache next time
+    except Exception:
+        pass
     return {"signal": sig, "fs": fs, "units": units}
 
 AVAILABLE_RECORDS = ["100", "101", "102", "103", "104", "105", "106", "107",
