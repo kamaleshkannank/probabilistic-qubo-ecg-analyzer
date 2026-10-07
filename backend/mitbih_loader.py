@@ -9,14 +9,16 @@ LOCAL_CACHE = os.path.join(BASE_DIR, "data", "mitbih_cache")
 
 
 def _cache_dirs():
-    """Prefer drives with free space (C: may be full); env override supported."""
+    """Prefer repository local cache first; support env override and Windows drive fallbacks."""
     dirs = []
     env = os.environ.get("MITBIH_CACHE_DIR")
     if env:
         dirs.append(env)
-    for d in ["D:/ecg_cache/mitbih", "E:/ecg_cache/mitbih", LOCAL_CACHE]:
-        if d not in dirs:
-            dirs.append(d)
+    dirs.append(LOCAL_CACHE)
+    if os.name == "nt":
+        for d in ["D:/ecg_cache/mitbih", "E:/ecg_cache/mitbih"]:
+            if d not in dirs:
+                dirs.append(d)
     return dirs
 
 
