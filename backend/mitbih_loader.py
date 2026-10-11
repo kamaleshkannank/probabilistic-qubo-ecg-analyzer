@@ -44,16 +44,12 @@ def _read_cached(path: str):
 
 def download_record(record: str) -> dict:
     """Download full record from PhysioNet; cache on disk (best effort)."""
-    import tempfile, wfdb, shutil
+    import wfdb
     record = str(record)
-    tmpdir = tempfile.mkdtemp()
-    try:
-        rec = wfdb.rdrecord(record, pn_dir="mitdb", physical=True, dl_dir=tmpdir)
-        sig = np.array(rec.p_signal[:, 0], dtype=np.float32)
-        fs = float(rec.fs)
-        units = rec.units[0] if rec.units else "mV"
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    rec = wfdb.rdrecord(record, pn_dir="mitdb", physical=True)
+    sig = np.array(rec.p_signal[:, 0], dtype=np.float32)
+    fs = float(rec.fs)
+    units = rec.units[0] if rec.units else "mV"
     try:
         os.makedirs(os.path.dirname(_cache_path(record)), exist_ok=True)
         np.savez_compressed(_cache_path(record), signal=sig, fs=fs, units=units)
@@ -68,9 +64,7 @@ AVAILABLE_RECORDS = ["100", "101", "102", "103", "104", "105", "106", "107",
                      "215", "217", "219", "220", "221", "222", "223", "228",
                      "230", "231", "232", "233", "234"]
 
-PREFETCH_DEFAULT = ["100", "101", "102", "103", "200", "201", "202", "203",
-                    "208", "209", "210", "212", "213", "214", "215", "217",
-                    "219", "222", "223", "228", "230", "231", "232", "233"]
+PREFETCH_DEFAULT = list(AVAILABLE_RECORDS)
 
 
 def load_mitbih(record: str = "100", seconds: float = 10.0, channel: int = 0):

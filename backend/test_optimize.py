@@ -156,6 +156,8 @@ def test_pdf_and_routes():
                    "Clinician Reviewer", "Signature"]:
         check(f"pdf has '{needle[:30]}'", needle in t)
     check("no key material in pdf", "AIza" not in t and "GEMINI_API_KEY" not in t)
+    r109 = c.get("/api/analyze_mitbih", params={"record": "109", "seconds": 10, "n_states": 20, "seed": 42})
+    check("record 109 analyze 200", r109.status_code == 200)
 
 
 def main():
